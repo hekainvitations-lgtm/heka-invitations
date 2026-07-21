@@ -1,0 +1,894 @@
+import React, { useState, useMemo, useRef } from "react";
+import {
+  Menu, X, ChevronRight, ChevronLeft, Check, Search, Upload,
+  MapPin, Phone, Mail, Calendar, Clock, Palette, MessageCircle,
+  Sparkles, Star, Crown, ArrowRight, Lock, LayoutDashboard,
+  Plus, Trash2, Save, ImageIcon, Globe
+} from "lucide-react";
+
+/* ============================================================
+   HEKA INVITATIONS — Web App Premium
+   Palette : Blanc cassé #F8F7F2 / Bleu pétrole #2F5968 /
+             Doré mat #C8A35A / Noir #2B2B2B
+   Titres  : Cormorant Garamond   Texte : Poppins
+   ============================================================ */
+
+const C = {
+  cream: "#F8F7F2",
+  creamDeep: "#F1EFE6",
+  petrol: "#2F5968",
+  petrolDeep: "#233F49",
+  gold: "#C8A35A",
+  goldSoft: "#E4D3AC",
+  black: "#2B2B2B",
+  white: "#FFFFFF",
+};
+
+const FONT_DISPLAY = "'Cormorant Garamond', serif";
+const FONT_BODY = "'Poppins', sans-serif";
+
+function GlobalStyle() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Poppins:wght@300;400;500;600;700&display=swap');
+      * { box-sizing: border-box; }
+      .heka-root { font-family: ${FONT_BODY}; background:${C.cream}; color:${C.black}; -webkit-font-smoothing:antialiased; }
+      .heka-root h1, .heka-root h2, .heka-root h3, .heka-root .font-display { font-family:${FONT_DISPLAY}; }
+      .heka-root ::selection { background:${C.gold}; color:${C.white}; }
+      @keyframes hekaFadeUp { from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:translateY(0);} }
+      .heka-fade { animation: hekaFadeUp .8s cubic-bezier(.22,1,.36,1) both; }
+      .heka-fade-1{animation-delay:.05s} .heka-fade-2{animation-delay:.18s} .heka-fade-3{animation-delay:.31s} .heka-fade-4{animation-delay:.44s}
+      @keyframes hekaFloat { 0%,100%{transform:translateY(0px) rotate(-2deg)} 50%{transform:translateY(-14px) rotate(1deg)} }
+      .heka-float { animation: hekaFloat 6s ease-in-out infinite; }
+      .heka-card { transition: transform .45s cubic-bezier(.22,1,.36,1), box-shadow .45s ease, border-color .3s ease; }
+      .heka-card:hover { transform: translateY(-6px); }
+      .heka-btn { transition: all .35s cubic-bezier(.22,1,.36,1); }
+      .heka-btn:active { transform: scale(.97); }
+      .heka-underline { position:relative; }
+      .heka-underline:after{content:'';position:absolute;left:0;bottom:-4px;width:0;height:1px;background:${C.gold};transition:width .35s ease;}
+      .heka-underline:hover:after{width:100%;}
+      .heka-scrollbar-none::-webkit-scrollbar{display:none;}
+      input, select, textarea { font-family:${FONT_BODY}; }
+      input::placeholder, textarea::placeholder { color:#9a978d; }
+      .heka-spin { animation: hekaSpin .9s linear infinite; }
+      @keyframes hekaSpin { to { transform: rotate(360deg); } }
+    `}</style>
+  );
+}
+
+/* ---------------------------- Loading overlay ---------------------------- */
+function Loader({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: `${C.cream}f0`, zIndex: 200 }}
+      className="flex items-center justify-center">
+      <div className="heka-spin" style={{ width: 34, height: 34, borderRadius: "50%", border: `2px solid ${C.goldSoft}`, borderTopColor: C.gold }} />
+    </div>
+  );
+}
+
+/* ---------------------------- Data ---------------------------- */
+const CATEGORIES = [
+  { id: "mariage", emoji: "💍", title: "Mariage", desc: "L'élégance pour le plus beau des jours." },
+  { id: "fiancailles", emoji: "💎", title: "Fiançailles", desc: "Une promesse, annoncée avec raffinement." },
+  { id: "anniversaire", emoji: "🎂", title: "Anniversaire", desc: "Célébrez une année de plus, avec style." },
+  { id: "babyshower", emoji: "👶", title: "Baby Shower", desc: "Douceur et tendresse pour l'accueillir." },
+  { id: "graduation", emoji: "🎓", title: "Graduation", desc: "Un accomplissement qui mérite d'être fêté." },
+  { id: "bapteme", emoji: "🎈", title: "Baptême", desc: "Un moment sacré, capturé avec grâce." },
+  { id: "aqiqa", emoji: "🕌", title: "Aqiqa", desc: "Une tradition honorée avec élégance." },
+  { id: "autres", emoji: "🎉", title: "Autres", desc: "Toute occasion mérite une belle invitation." },
+];
+
+const PACKS_DEFAULT = [
+  {
+    id: "essential", icon: Sparkles, name: "Essential", price: 50,
+    features: ["Invitation PDF personnalisée", "Design sur mesure", "Informations essentielles", "Livraison PDF 24 à 48h"],
+  },
+  {
+    id: "premium", icon: Star, name: "Premium", price: 75,
+    features: ["Invitation digitale interactive", "Compte à rebours", "Google Maps intégré", "Bouton WhatsApp", "Design Premium"],
+  },
+  {
+    id: "signature", icon: Crown, name: "Signature", price: 100,
+    features: ["Tout le Pack Premium", "Animation d'ouverture", "Galerie photos", "Musique de fond", "Personnalisation avancée"],
+  },
+];
+
+const STYLES = ["Minimaliste", "Floral", "Luxury", "Moderne"];
+
+function buildModels() {
+  const packTier = { essential: 0, premium: 1, signature: 2 };
+  const combos = [
+    { cats: ["mariage", "fiancailles"], style: "Luxury", grad: [C.petrol, C.petrolDeep], min: "essential" },
+    { cats: ["mariage"], style: "Floral", grad: [C.gold, C.goldSoft], min: "essential" },
+    { cats: ["mariage", "fiancailles"], style: "Minimaliste", grad: [C.black, "#4a4a4a"], min: "premium" },
+    { cats: ["anniversaire", "autres"], style: "Moderne", grad: [C.gold, C.petrol], min: "essential" },
+    { cats: ["anniversaire"], style: "Floral", grad: ["#d98b8b", C.goldSoft], min: "essential" },
+    { cats: ["babyshower"], style: "Minimaliste", grad: ["#a9c4c9", C.cream], min: "essential" },
+    { cats: ["babyshower"], style: "Floral", grad: ["#cbb7d8", C.goldSoft], min: "premium" },
+    { cats: ["graduation"], style: "Moderne", grad: [C.petrolDeep, C.gold], min: "essential" },
+    { cats: ["graduation"], style: "Luxury", grad: [C.black, C.gold], min: "signature" },
+    { cats: ["bapteme"], style: "Floral", grad: ["#bcd4c7", C.cream], min: "essential" },
+    { cats: ["aqiqa"], style: "Minimaliste", grad: [C.petrol, C.creamDeep], min: "essential" },
+    { cats: ["aqiqa"], style: "Luxury", grad: [C.gold, C.petrolDeep], min: "premium" },
+    { cats: ["autres", "anniversaire"], style: "Luxury", grad: [C.gold, C.black], min: "signature" },
+    { cats: ["mariage"], style: "Moderne", grad: [C.petrol, C.gold], min: "signature" },
+    { cats: ["fiancailles"], style: "Minimaliste", grad: [C.creamDeep, C.gold], min: "premium" },
+    { cats: ["babyshower", "bapteme"], style: "Moderne", grad: ["#a9c4c9", C.gold], min: "premium" },
+  ];
+  return combos.map((c, i) => ({
+    code: "W" + String(i + 1).padStart(3, "0"),
+    name: `Modèle ${c.style} n°${i + 1}`,
+    style: c.style,
+    grad: c.grad,
+    categories: c.cats,
+    minPack: c.min,
+    minTier: packTier[c.min],
+  }));
+}
+
+const STEP_LABELS = ["Événement", "Pack", "Modèle", "Formulaire", "Récapitulatif"];
+
+/* ---------------------------- Small UI atoms ---------------------------- */
+function GoldButton({ children, onClick, style, full, disabled, outline }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="heka-btn"
+      style={{
+        fontFamily: FONT_BODY,
+        fontWeight: 500,
+        fontSize: 14.5,
+        letterSpacing: 0.3,
+        padding: "14px 30px",
+        borderRadius: 999,
+        border: outline ? `1px solid ${C.black}` : "none",
+        background: disabled ? "#d8d5c9" : outline ? "transparent" : C.black,
+        color: outline ? C.black : C.cream,
+        cursor: disabled ? "not-allowed" : "pointer",
+        width: full ? "100%" : "auto",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        ...style,
+      }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = outline ? C.black : C.petrol; if (!disabled && outline) e.currentTarget.style.color = C.cream; }}
+      onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.background = outline ? "transparent" : C.black; if (!disabled && outline) e.currentTarget.style.color = C.black; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Eyebrow({ children }) {
+  return (
+    <div style={{ fontSize: 12, letterSpacing: 3, textTransform: "uppercase", color: C.gold, fontWeight: 600, marginBottom: 14 }}>
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title, sub, center }) {
+  return (
+    <div style={{ textAlign: center ? "center" : "left", maxWidth: 640, margin: center ? "0 auto" : 0 }} className="heka-fade">
+      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+      <h2 style={{ fontSize: "clamp(28px,4vw,42px)", fontWeight: 500, lineHeight: 1.15, color: C.black, margin: 0 }}>{title}</h2>
+      {sub && <p style={{ marginTop: 14, fontSize: 15.5, color: "#5c5952", lineHeight: 1.7 }}>{sub}</p>}
+    </div>
+  );
+}
+
+/* ---------------------------- Progress bar (order flow) ---------------------------- */
+function ProgressBar({ step, onBack }) {
+  return (
+    <div style={{ background: C.white, borderBottom: `1px solid ${C.creamDeep}`, position: "sticky", top: 72, zIndex: 40 }}>
+      <div style={{ maxWidth: 1040, margin: "0 auto", padding: "18px 20px" }} className="flex items-center gap-3">
+        {step > 0 && (
+          <button onClick={onBack} className="heka-btn" style={{ background: "none", border: "none", cursor: "pointer", color: C.petrol, display: "flex", alignItems: "center", gap: 4, fontSize: 13.5, flexShrink: 0 }}>
+            <ChevronLeft size={16} /> Retour
+          </button>
+        )}
+        <div className="flex items-center flex-1 heka-scrollbar-none" style={{ overflowX: "auto" }}>
+          {STEP_LABELS.map((label, i) => (
+            <React.Fragment key={label}>
+              <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11, fontWeight: 600, flexShrink: 0, transition: "all .3s ease",
+                  background: i <= step ? C.gold : C.creamDeep, color: i <= step ? C.white : "#a9a595",
+                }}>
+                  {i < step ? <Check size={12} /> : i + 1}
+                </div>
+                <span style={{ fontSize: 12.5, color: i <= step ? C.black : "#a9a595", whiteSpace: "nowrap", fontWeight: i === step ? 600 : 400 }}>{label}</span>
+              </div>
+              {i < STEP_LABELS.length - 1 && <div style={{ width: 20, height: 1, background: i < step ? C.gold : C.creamDeep, margin: "0 8px", flexShrink: 0 }} />}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Navbar ---------------------------- */
+function Navbar({ onNav, onStart }) {
+  const [open, setOpen] = useState(false);
+  const links = [
+    { label: "Accueil", id: "hero" },
+    { label: "Catégories", id: "categories" },
+    { label: "Comment ça fonctionne", id: "how" },
+    { label: "FAQ", id: "faq" },
+    { label: "Contact", id: "contact" },
+  ];
+  return (
+    <div style={{ position: "sticky", top: 0, zIndex: 50, background: `${C.cream}ee`, backdropFilter: "blur(10px)", borderBottom: `1px solid ${C.creamDeep}` }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 24px" }} className="flex items-center justify-between">
+        <div onClick={() => onNav("hero")} style={{ cursor: "pointer", fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 600, letterSpacing: 1, color: C.petrol }}>
+          HEKA
+        </div>
+        <div className="hidden md:flex items-center gap-8">
+          {links.map((l) => (
+            <span key={l.id} onClick={() => onNav(l.id)} className="heka-underline" style={{ fontSize: 14, cursor: "pointer", color: "#4a473f" }}>
+              {l.label}
+            </span>
+          ))}
+        </div>
+        <div className="hidden md:block">
+          <GoldButton onClick={onStart} style={{ padding: "11px 24px", fontSize: 13.5 }}>
+            Créer mon invitation <ArrowRight size={14} />
+          </GoldButton>
+        </div>
+        <button className="md:hidden" onClick={() => setOpen(!open)} style={{ background: "none", border: "none" }}>
+          {open ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+      {open && (
+        <div className="md:hidden heka-fade" style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {links.map((l) => (
+            <span key={l.id} onClick={() => { onNav(l.id); setOpen(false); }} style={{ fontSize: 15 }}>{l.label}</span>
+          ))}
+          <GoldButton onClick={onStart} full>Créer mon invitation</GoldButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------- Home page sections ---------------------------- */
+function Hero({ onStart, onSeeModels }) {
+  return (
+    <div id="hero" style={{ position: "relative", overflow: "hidden", padding: "clamp(60px,10vw,110px) 24px 80px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }} className="grid md:grid-cols-2 gap-14 items-center">
+        <div className="heka-fade heka-fade-1">
+          <Eyebrow>Invitations digitales premium</Eyebrow>
+          <h1 style={{ fontSize: "clamp(34px,5.4vw,58px)", fontWeight: 500, lineHeight: 1.1, color: C.black, margin: 0 }}>
+            Chaque événement commence par <span style={{ fontStyle: "italic", color: C.petrol }}>une belle invitation.</span>
+          </h1>
+          <p style={{ fontSize: 16.5, color: "#5c5952", marginTop: 22, lineHeight: 1.75, maxWidth: 480 }}>
+            Créez une invitation digitale élégante et personnalisée en quelques clics.
+          </p>
+          <div className="flex flex-wrap gap-4" style={{ marginTop: 34 }}>
+            <GoldButton onClick={onStart}>Créer mon invitation <ArrowRight size={15} /></GoldButton>
+            <GoldButton onClick={onSeeModels} outline>Voir les modèles</GoldButton>
+          </div>
+        </div>
+        <div className="heka-fade heka-fade-2 flex justify-center">
+          <div className="heka-float" style={{
+            width: 260, height: 520, borderRadius: 38, background: `linear-gradient(150deg, ${C.petrol}, ${C.petrolDeep})`,
+            boxShadow: "0 40px 80px -30px rgba(43,43,43,.35)", padding: 14, position: "relative",
+          }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: 26, background: C.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
+              <div style={{ fontFamily: FONT_DISPLAY, fontStyle: "italic", color: C.gold, fontSize: 13, letterSpacing: 2, marginBottom: 10 }}>VOUS ÊTES INVITÉS</div>
+              <div style={{ width: 46, height: 1, background: C.gold, margin: "0 auto 18px" }} />
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.petrol, lineHeight: 1.25 }}>Yasmine<br/>&amp; Karim</div>
+              <div style={{ fontSize: 11, color: "#8a8779", marginTop: 16, letterSpacing: 1 }}>12 . 09 . 2026 — CASABLANCA</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WhyChoose() {
+  const items = [
+    { icon: Sparkles, title: "100% Personnalisé", text: "Chaque invitation est adaptée à votre histoire et à votre style." },
+    { icon: Clock, title: "Livraison rapide", text: "Sous 24 à 48 heures après confirmation de votre commande." },
+    { icon: Globe, title: "4 langues", text: "Français, Arabe, Anglais et Darija." },
+    { icon: Crown, title: "Design Premium", text: "Une exécution soignée, digne des plus belles maisons." },
+  ];
+  return (
+    <div style={{ background: C.white, padding: "90px 24px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <SectionTitle eyebrow="L'expérience HEKA" title="Pourquoi choisir HEKA" center />
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6" style={{ marginTop: 50 }}>
+          {items.map((it, i) => (
+            <div key={it.title} className="heka-card heka-fade" style={{ animationDelay: `${i * 0.1}s`, background: C.cream, borderRadius: 22, padding: "34px 26px", boxShadow: "0 2px 20px -8px rgba(43,43,43,.06)" }}>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: `${C.gold}20`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+                <it.icon size={20} color={C.gold} />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: C.black, marginBottom: 8 }}>{it.title}</h3>
+              <p style={{ fontSize: 13.5, color: "#6b685f", lineHeight: 1.6 }}>{it.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    "Choisissez votre événement", "Choisissez votre pack", "Choisissez votre modèle", "Remplissez le formulaire",
+    "Vérifiez votre commande", "Envoyez votre demande via WhatsApp", "Nous vérifions votre demande", "Paiement après confirmation", "Livraison",
+  ];
+  return (
+    <div id="how" style={{ padding: "90px 24px", background: C.cream }}>
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <SectionTitle eyebrow="Le parcours" title="Comment ça fonctionne" center sub="Neuf étapes simples, de l'inspiration à la livraison." />
+        <div style={{ marginTop: 56 }}>
+          {steps.map((s, i) => (
+            <div key={s} className="heka-fade" style={{ animationDelay: `${i * 0.06}s`, display: "flex", gap: 20, alignItems: "flex-start" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${C.gold}`, color: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontFamily: FONT_DISPLAY, fontWeight: 600, flexShrink: 0 }}>
+                  {i + 1}
+                </div>
+                {i < steps.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 34, background: C.goldSoft }} />}
+              </div>
+              <div style={{ paddingBottom: 34 }}>
+                <p style={{ fontSize: 15.5, color: C.black, fontWeight: 500, paddingTop: 6 }}>{s}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoriesPreview({ categories, onPick }) {
+  return (
+    <div id="categories" style={{ padding: "90px 24px", background: C.white }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <SectionTitle eyebrow="Vos occasions" title="Choisir un événement" center sub="Sélectionnez l'occasion qui vous rassemble." />
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6" style={{ marginTop: 50 }}>
+          {categories.map((cat, i) => (
+            <div key={cat.id} className="heka-card heka-fade" style={{ animationDelay: `${i * 0.05}s`, borderRadius: 24, overflow: "hidden", border: `1px solid ${C.creamDeep}`, cursor: "pointer" }} onClick={() => onPick(cat)}>
+              <div style={{ height: 130, background: `linear-gradient(140deg, ${C.petrol}, ${C.petrolDeep})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>
+                {cat.emoji}
+              </div>
+              <div style={{ padding: "20px 20px 24px" }}>
+                <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.black, marginBottom: 6 }}>{cat.title}</h3>
+                <p style={{ fontSize: 12.5, color: "#6b685f", lineHeight: 1.5, minHeight: 34 }}>{cat.desc}</p>
+                <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: C.gold, display: "flex", alignItems: "center", gap: 4 }}>
+                  Découvrir <ChevronRight size={13} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FAQ() {
+  const items = [
+    { q: "Comment recevoir mon invitation ?", a: "Après validation de votre commande sur WhatsApp et confirmation du paiement, votre invitation vous est livrée sous 24 à 48 heures." },
+    { q: "Puis-je modifier mon invitation après commande ?", a: "Oui, tant que la production n'a pas débuté, contactez-nous directement sur WhatsApp pour toute modification." },
+    { q: "Le paiement se fait-il en ligne ?", a: "Non. Le paiement s'effectue uniquement après validation de votre commande par notre équipe." },
+    { q: "Dans quelles langues puis-je commander ?", a: "Français, Arabe, Anglais et Darija." },
+  ];
+  const [openI, setOpenI] = useState(null);
+  return (
+    <div id="faq" style={{ padding: "90px 24px", background: C.cream }}>
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        <SectionTitle eyebrow="Questions" title="FAQ" center />
+        <div style={{ marginTop: 44 }}>
+          {items.map((it, i) => (
+            <div key={it.q} style={{ borderBottom: `1px solid ${C.creamDeep}`, padding: "20px 4px", cursor: "pointer" }} onClick={() => setOpenI(openI === i ? null : i)}>
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: 15.5, fontWeight: 500, color: C.black }}>{it.q}</span>
+                <span style={{ color: C.gold, fontSize: 20, transform: openI === i ? "rotate(45deg)" : "none", transition: "transform .3s" }}>+</span>
+              </div>
+              {openI === i && <p className="heka-fade" style={{ fontSize: 13.5, color: "#6b685f", marginTop: 12, lineHeight: 1.7 }}>{it.a}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Contact({ whatsapp, email }) {
+  return (
+    <div id="contact" style={{ padding: "90px 24px", background: `linear-gradient(160deg, ${C.petrol}, ${C.petrolDeep})`, textAlign: "center" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto" }}>
+        <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(28px,4vw,38px)", color: C.cream, fontWeight: 500 }}>Une question ? Parlons-en.</h2>
+        <p style={{ color: "#d7dfe1", marginTop: 14, fontSize: 14.5 }}>Notre équipe vous répond avec plaisir.</p>
+        <div className="flex flex-wrap gap-4 justify-center" style={{ marginTop: 30 }}>
+          <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+            <GoldButton style={{ background: C.gold }}><MessageCircle size={15} /> WhatsApp</GoldButton>
+          </a>
+          <a href={`mailto:${email}`} style={{ textDecoration: "none" }}>
+            <GoldButton outline style={{ borderColor: C.cream, color: C.cream }}><Mail size={15} /> {email}</GoldButton>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div style={{ background: C.black, color: "#c9c6bb", padding: "40px 24px", textAlign: "center", fontSize: 12.5 }}>
+      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.cream, marginBottom: 8 }}>HEKA</div>
+      <p>© {new Date().getFullYear()} HEKA Invitations — Tous droits réservés.</p>
+    </div>
+  );
+}
+
+/* ---------------------------- Order flow: Categories ---------------------------- */
+function StepCategories({ categories, onPick }) {
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 1180, margin: "0 auto" }}>
+      <SectionTitle eyebrow="Étape 1" title="Choisissez votre événement" sub="Sélectionnez l'occasion que vous célébrez." />
+      <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6" style={{ marginTop: 44 }}>
+        {categories.map((cat) => (
+          <div key={cat.id} className="heka-card heka-fade" style={{ borderRadius: 24, overflow: "hidden", border: `1px solid ${C.creamDeep}`, cursor: "pointer", background: C.white }} onClick={() => onPick(cat)}>
+            <div style={{ height: 120, background: `linear-gradient(140deg, ${C.petrol}, ${C.petrolDeep})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38 }}>{cat.emoji}</div>
+            <div style={{ padding: 20 }}>
+              <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 19, color: C.black }}>{cat.title}</h3>
+              <p style={{ fontSize: 12, color: "#6b685f", marginTop: 4 }}>{cat.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Order flow: Packs ---------------------------- */
+function StepPacks({ packs, onPick, selected }) {
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 1040, margin: "0 auto" }}>
+      <SectionTitle eyebrow="Étape 2" title="Choisissez votre pack" center sub="Trois formules pensées pour chaque besoin." />
+      <div className="grid md:grid-cols-3 gap-7" style={{ marginTop: 46 }}>
+        {packs.map((p) => {
+          const active = selected?.id === p.id;
+          const Icon = p.icon;
+          const featured = p.id === "premium";
+          return (
+            <div key={p.id} className="heka-card" style={{
+              borderRadius: 26, padding: "38px 28px", background: featured ? C.petrol : C.white,
+              border: active ? `2px solid ${C.gold}` : `1px solid ${C.creamDeep}`, position: "relative",
+              boxShadow: featured ? "0 30px 60px -25px rgba(47,89,104,.5)" : "0 2px 20px -10px rgba(0,0,0,.05)",
+            }}>
+              {featured && <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: C.gold, color: C.white, fontSize: 11, fontWeight: 600, padding: "5px 16px", borderRadius: 999, letterSpacing: 1 }}>POPULAIRE</div>}
+              <Icon size={26} color={featured ? C.gold : C.gold} />
+              <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, marginTop: 14, color: featured ? C.cream : C.black }}>{p.name}</h3>
+              <div style={{ fontSize: 34, fontWeight: 600, marginTop: 6, color: featured ? C.cream : C.black }}>{p.price} <span style={{ fontSize: 14, fontWeight: 400 }}>DH</span></div>
+              <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 12 }}>
+                {p.features.map((f) => (
+                  <div key={f} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, color: featured ? "#e7ecec" : "#5c5952" }}>
+                    <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 26 }}>
+                <GoldButton full onClick={() => onPick(p)} style={featured ? { background: C.gold } : {}}>Choisir</GoldButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Order flow: Models ---------------------------- */
+function StepModels({ models, category, pack, onPick }) {
+  const tierOrder = { essential: 0, premium: 1, signature: 2 };
+  const [query, setQuery] = useState("");
+  const [styleFilter, setStyleFilter] = useState("Tous");
+
+  const filtered = useMemo(() => {
+    return models.filter((m) => {
+      const matchesCat = m.categories.includes(category.id);
+      const matchesPack = m.minTier <= tierOrder[pack.id];
+      const matchesStyle = styleFilter === "Tous" || m.style === styleFilter;
+      const matchesQuery = query.trim() === "" || m.code.toLowerCase().includes(query.toLowerCase()) || m.name.toLowerCase().includes(query.toLowerCase());
+      return matchesCat && matchesPack && matchesStyle && matchesQuery;
+    });
+  }, [models, category, pack, query, styleFilter]);
+
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 1180, margin: "0 auto" }}>
+      <SectionTitle eyebrow="Étape 3" title="Choisissez votre modèle" sub={`Modèles disponibles pour ${category.title} — Pack ${pack.name}.`} />
+      <div className="flex flex-wrap gap-3 items-center" style={{ marginTop: 30 }}>
+        <div style={{ position: "relative", flex: "1 1 220px" }}>
+          <Search size={15} style={{ position: "absolute", left: 14, top: 13 }} color="#9a978d" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un code ou un style…"
+            style={{ width: "100%", padding: "11px 14px 11px 38px", borderRadius: 999, border: `1px solid ${C.creamDeep}`, background: C.white, fontSize: 13.5, outline: "none" }} />
+        </div>
+        {["Tous", ...STYLES].map((s) => (
+          <button key={s} onClick={() => setStyleFilter(s)} style={{
+            padding: "9px 18px", borderRadius: 999, fontSize: 12.5, border: `1px solid ${styleFilter === s ? C.black : C.creamDeep}`,
+            background: styleFilter === s ? C.black : "transparent", color: styleFilter === s ? C.cream : "#5c5952", cursor: "pointer", flexShrink: 0,
+          }}>{s}</button>
+        ))}
+      </div>
+
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-7" style={{ marginTop: 40 }}>
+        {filtered.map((m) => (
+          <div key={m.code} className="heka-card" style={{ borderRadius: 22, overflow: "hidden", border: `1px solid ${C.creamDeep}`, background: C.white }}>
+            <div style={{ height: 210, background: `linear-gradient(155deg, ${m.grad[0]}, ${m.grad[1]})`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              <span style={{ fontFamily: FONT_DISPLAY, fontStyle: "italic", color: "#fff", fontSize: 15, letterSpacing: 1 }}>Aperçu</span>
+              <span style={{ position: "absolute", top: 14, right: 14, fontSize: 11, background: "#ffffff30", color: "#fff", padding: "4px 10px", borderRadius: 999 }}>{m.code}</span>
+            </div>
+            <div style={{ padding: "18px 20px 22px" }}>
+              <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: C.black }}>{m.name}</h3>
+              <p style={{ fontSize: 12, color: "#8a8779", marginTop: 4 }}>Style {m.style}</p>
+              <div style={{ marginTop: 14 }}>
+                <GoldButton full onClick={() => onPick(m)} style={{ padding: "10px 20px", fontSize: 13 }}>Choisir ce modèle</GoldButton>
+              </div>
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <p style={{ gridColumn: "1/-1", textAlign: "center", color: "#8a8779", padding: "40px 0" }}>Aucun modèle ne correspond à votre recherche.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Order flow: Form ---------------------------- */
+function Field({ label, children }) {
+  return (
+    <div>
+      <label style={{ fontSize: 12.5, fontWeight: 500, color: "#5c5952", marginBottom: 6, display: "block" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+const inputStyle = {
+  width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.creamDeep}`,
+  background: C.white, fontSize: 13.5, outline: "none",
+};
+
+function StepForm({ data, setData, onContinue }) {
+  const upd = (k, v) => setData((d) => ({ ...d, [k]: v }));
+  const dropRef = useRef(null);
+
+  const onFiles = (key, files) => {
+    const names = Array.from(files).map((f) => f.name);
+    upd(key, names);
+  };
+
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 780, margin: "0 auto" }}>
+      <SectionTitle eyebrow="Étape 4" title="Vos informations" sub="Toutes les données saisies sont conservées si vous revenez en arrière." />
+
+      <div style={{ marginTop: 40 }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.petrol, marginBottom: 18 }}>Informations</h3>
+        <div className="grid sm:grid-cols-2 gap-5">
+          <Field label="Nom(s)"><input style={inputStyle} value={data.noms} onChange={(e) => upd("noms", e.target.value)} placeholder="Yasmine & Karim" /></Field>
+          <Field label="Téléphone"><input style={inputStyle} value={data.telephone} onChange={(e) => upd("telephone", e.target.value)} placeholder="06 12 34 56 78" /></Field>
+          <Field label="Email (optionnel)"><input style={inputStyle} value={data.email} onChange={(e) => upd("email", e.target.value)} placeholder="vous@email.com" /></Field>
+          <Field label="Date"><input type="date" style={inputStyle} value={data.date} onChange={(e) => upd("date", e.target.value)} /></Field>
+          <Field label="Heure"><input type="time" style={inputStyle} value={data.heure} onChange={(e) => upd("heure", e.target.value)} /></Field>
+          <Field label="Dress Code"><input style={inputStyle} value={data.dressCode} onChange={(e) => upd("dressCode", e.target.value)} placeholder="Élégant / Couleurs pastel" /></Field>
+          <Field label="Langue">
+            <select style={inputStyle} value={data.langue} onChange={(e) => upd("langue", e.target.value)}>
+              {["Français", "Arabe", "Anglais", "Darija"].map((l) => <option key={l}>{l}</option>)}
+            </select>
+          </Field>
+          <Field label="Couleurs souhaitées"><input style={inputStyle} value={data.couleurs} onChange={(e) => upd("couleurs", e.target.value)} placeholder="Bleu pétrole, doré…" /></Field>
+          <Field label="Adresse"><input style={inputStyle} value={data.adresse} onChange={(e) => upd("adresse", e.target.value)} placeholder="Lieu de l'événement" /></Field>
+          <Field label="Lien Google Maps"><input style={inputStyle} value={data.maps} onChange={(e) => upd("maps", e.target.value)} placeholder="https://maps.google.com/…" /></Field>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 44 }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.petrol, marginBottom: 18 }}>Fichiers</h3>
+        <div className="grid sm:grid-cols-3 gap-4">
+          {[["photo", "Photo"], ["logo", "Logo"], ["autres", "Autres fichiers"]].map(([key, label]) => (
+            <label key={key} style={{
+              border: `1.5px dashed ${C.creamDeep}`, borderRadius: 16, padding: "24px 12px", textAlign: "center",
+              cursor: "pointer", background: C.white, display: "block",
+            }}>
+              <input type="file" multiple hidden onChange={(e) => onFiles(key, e.target.files)} />
+              <Upload size={18} color={C.gold} style={{ margin: "0 auto 8px" }} />
+              <div style={{ fontSize: 12.5, fontWeight: 500 }}>{label}</div>
+              <div style={{ fontSize: 11, color: "#8a8779", marginTop: 4 }}>
+                {data[key]?.length ? data[key].join(", ") : "Glissez-déposez ou cliquez"}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 44 }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.petrol, marginBottom: 18 }}>Options</h3>
+        <div className="flex flex-col gap-3">
+          {[["rsvp", "RSVP", 20], ["express", "Livraison Express", 20]].map(([key, label, price]) => (
+            <label key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", border: `1px solid ${C.creamDeep}`, borderRadius: 14, background: C.white, cursor: "pointer" }}>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" checked={data.options[key]} onChange={(e) => upd("options", { ...data.options, [key]: e.target.checked })} />
+                <span style={{ fontSize: 14 }}>{label}</span>
+              </div>
+              <span style={{ fontSize: 13, color: C.gold, fontWeight: 600 }}>+{price} DH</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 36 }}>
+        <Field label="Commentaires">
+          <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical" }} value={data.commentaires} onChange={(e) => upd("commentaires", e.target.value)} placeholder="Précisions supplémentaires…" />
+        </Field>
+      </div>
+
+      <div style={{ marginTop: 40 }}>
+        <GoldButton full onClick={onContinue}>Continuer <ArrowRight size={15} /></GoldButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Order flow: Recap ---------------------------- */
+function StepRecap({ category, pack, model, data, total, onEdit, onSubmit }) {
+  const rows = [
+    ["Événement", category?.title], ["Pack", `${pack?.name} (${pack?.price} DH)`], ["Modèle", `${model?.name} — ${model?.code}`],
+    ["Nom(s)", data.noms], ["Téléphone", data.telephone], ["Email", data.email || "—"], ["Date", data.date], ["Heure", data.heure],
+    ["Adresse", data.adresse], ["Google Maps", data.maps || "—"], ["Dress Code", data.dressCode || "—"], ["Langue", data.langue],
+    ["Couleurs", data.couleurs || "—"],
+    ["Options", [data.options.rsvp && "RSVP", data.options.express && "Livraison Express"].filter(Boolean).join(", ") || "Aucune"],
+    ["Commentaires", data.commentaires || "—"],
+  ];
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 720, margin: "0 auto" }}>
+      <SectionTitle eyebrow="Étape 5" title="Vérifiez votre commande" sub="Relisez attentivement avant l'envoi." />
+      <div style={{ marginTop: 36, background: C.white, borderRadius: 22, border: `1px solid ${C.creamDeep}`, overflow: "hidden" }}>
+        {rows.map(([label, value], i) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 20, padding: "14px 22px", background: i % 2 ? C.cream : C.white, fontSize: 13.5 }}>
+            <span style={{ color: "#8a8779", flexShrink: 0 }}>{label}</span>
+            <span style={{ color: C.black, fontWeight: 500, textAlign: "right" }}>{value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 24, background: C.petrol, borderRadius: 18, padding: "22px 24px", color: C.cream }}>
+        <div className="flex justify-between" style={{ fontSize: 13.5, opacity: 0.85 }}>
+          <span>Pack {pack?.name}</span><span>{pack?.price} DH</span>
+        </div>
+        {data.options.rsvp && <div className="flex justify-between" style={{ fontSize: 13.5, opacity: 0.85, marginTop: 6 }}><span>RSVP</span><span>+20 DH</span></div>}
+        {data.options.express && <div className="flex justify-between" style={{ fontSize: 13.5, opacity: 0.85, marginTop: 6 }}><span>Livraison Express</span><span>+20 DH</span></div>}
+        <div style={{ height: 1, background: "#ffffff30", margin: "14px 0" }} />
+        <div className="flex justify-between" style={{ fontSize: 19, fontWeight: 600 }}>
+          <span>Total</span><span style={{ color: C.gold }}>{total} DH</span>
+        </div>
+      </div>
+
+      <div className="flex gap-4" style={{ marginTop: 32 }}>
+        <GoldButton outline onClick={onEdit} style={{ flex: 1 }}>Modifier</GoldButton>
+        <GoldButton onClick={onSubmit} style={{ flex: 1, background: C.gold }}><MessageCircle size={15} /> Générer ma commande</GoldButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Admin ---------------------------- */
+function AdminPage({ packs, setPacks, whatsapp, setWhatsapp, email, setEmail, delay, setDelay, models, setModels, categories, lastUpdate }) {
+  const [pass, setPass] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const ADMIN_PASS = "heka2026";
+
+  if (!authed) {
+    return (
+      <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ background: C.white, padding: "44px 36px", borderRadius: 22, width: 340, textAlign: "center", border: `1px solid ${C.creamDeep}` }}>
+          <Lock size={26} color={C.gold} style={{ margin: "0 auto 16px" }} />
+          <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 22 }}>Espace Administration</h3>
+          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mot de passe"
+            style={{ ...inputStyle, marginTop: 20, textAlign: "center" }}
+            onKeyDown={(e) => e.key === "Enter" && pass === ADMIN_PASS && setAuthed(true)} />
+          <div style={{ marginTop: 18 }}>
+            <GoldButton full onClick={() => pass === ADMIN_PASS && setAuthed(true)}>Se connecter</GoldButton>
+          </div>
+          <p style={{ fontSize: 11, color: "#8a8779", marginTop: 14 }}>Mot de passe démo : heka2026</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "50px 24px", maxWidth: 1000, margin: "0 auto" }}>
+      <div className="flex items-center gap-3" style={{ marginBottom: 30 }}>
+        <LayoutDashboard color={C.gold} />
+        <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 28 }}>Tableau de bord</h2>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-5" style={{ marginBottom: 40 }}>
+        {[["Modèles", models.length], ["Catégories", categories.length], ["Dernière mise à jour", lastUpdate]].map(([label, val]) => (
+          <div key={label} style={{ background: C.white, borderRadius: 18, padding: 22, border: `1px solid ${C.creamDeep}` }}>
+            <div style={{ fontSize: 12, color: "#8a8779" }}>{label}</div>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, marginTop: 6, color: C.petrol }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: C.white, borderRadius: 18, padding: 26, border: `1px solid ${C.creamDeep}`, marginBottom: 28 }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 19, marginBottom: 18 }}>Prix des packs</h3>
+        <div className="grid sm:grid-cols-3 gap-4">
+          {packs.map((p, i) => (
+            <Field key={p.id} label={p.name}>
+              <input type="number" style={inputStyle} value={p.price} onChange={(e) => {
+                const v = Number(e.target.value);
+                setPacks((arr) => arr.map((x, idx) => idx === i ? { ...x, price: v } : x));
+              }} />
+            </Field>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ background: C.white, borderRadius: 18, padding: 26, border: `1px solid ${C.creamDeep}`, marginBottom: 28 }}>
+        <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 19, marginBottom: 18 }}>Coordonnées &amp; délais</h3>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Numéro WhatsApp"><input style={inputStyle} value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} /></Field>
+          <Field label="Adresse email"><input style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="Délai de livraison"><input style={inputStyle} value={delay} onChange={(e) => setDelay(e.target.value)} /></Field>
+        </div>
+      </div>
+
+      <div style={{ background: C.white, borderRadius: 18, padding: 26, border: `1px solid ${C.creamDeep}` }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 18 }}>
+          <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 19 }}>Modèles ({models.length})</h3>
+          <button onClick={() => setModels((m) => [...m, {
+            code: "W" + String(m.length + 1).padStart(3, "0"), name: "Nouveau modèle", style: "Moderne",
+            grad: [C.gold, C.petrol], categories: [categories[0].id], minPack: "essential", minTier: 0,
+          }])} style={{ background: "none", border: `1px solid ${C.black}`, borderRadius: 999, padding: "8px 16px", fontSize: 12.5, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+            <Plus size={14} /> Ajouter un modèle
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          {models.map((m, i) => (
+            <div key={m.code + i} className="flex items-center gap-3" style={{ border: `1px solid ${C.creamDeep}`, borderRadius: 12, padding: "10px 14px" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: `linear-gradient(135deg, ${m.grad[0]}, ${m.grad[1]})`, flexShrink: 0 }} />
+              <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={m.name} onChange={(e) => setModels((arr) => arr.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} />
+              <span style={{ fontSize: 12, color: "#8a8779", flexShrink: 0 }}>{m.code}</span>
+              <button onClick={() => setModels((arr) => arr.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#c0574f", flexShrink: 0 }}>
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   MAIN APP
+   ============================================================ */
+export default function App() {
+  const [view, setView] = useState("home"); // home | order | admin
+  const [orderStep, setOrderStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const [packs, setPacks] = useState(PACKS_DEFAULT);
+  const [models, setModels] = useState(() => buildModels());
+  const [whatsapp, setWhatsapp] = useState("212600000000");
+  const [email, setEmail] = useState("contact@heka-invitations.com");
+  const [delay, setDelay] = useState("24 à 48 heures");
+  const lastUpdate = useMemo(() => new Date().toLocaleDateString("fr-FR"), []);
+
+  const [category, setCategory] = useState(null);
+  const [pack, setPack] = useState(null);
+  const [model, setModel] = useState(null);
+  const [formData, setFormData] = useState({
+    noms: "", telephone: "", email: "", date: "", heure: "", adresse: "", maps: "",
+    dressCode: "", langue: "Français", couleurs: "", commentaires: "",
+    photo: [], logo: [], autres: [],
+    options: { rsvp: false, express: false },
+  });
+
+  const total = (pack?.price || 0) + (formData.options.rsvp ? 20 : 0) + (formData.options.express ? 20 : 0);
+
+  const goto = (fn) => { setLoading(true); setTimeout(() => { fn(); setLoading(false); window.scrollTo({ top: 0, behavior: "smooth" }); }, 420); };
+
+  const startOrder = () => goto(() => { setView("order"); setOrderStep(0); });
+  const scrollHome = (id) => {
+    if (view !== "home") { setView("home"); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 60); }
+    else document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const pickCategory = (cat) => goto(() => { setCategory(cat); setOrderStep(1); });
+  const pickPack = (p) => goto(() => { setPack(p); setOrderStep(2); });
+  const pickModel = (m) => goto(() => { setModel(m); setOrderStep(3); });
+  const continueForm = () => goto(() => setOrderStep(4));
+  const backStep = () => goto(() => { if (orderStep === 0) setView("home"); else setOrderStep((s) => s - 1); });
+  const editOrder = () => goto(() => setOrderStep(3));
+
+  const submitOrder = () => {
+    const msg =
+`━━━━━━━━━━━━━━━━━━
+✨ NOUVELLE COMMANDE
+HEKA INVITATIONS
+━━━━━━━━━━━━━━━━━━
+📌 Événement : ${category?.title}
+📦 Pack : ${pack?.name} (${pack?.price} DH)
+🎨 Modèle : ${model?.name} (${model?.code})
+👤 Nom : ${formData.noms}
+📅 Date : ${formData.date}
+🕒 Heure : ${formData.heure}
+📍 Adresse : ${formData.adresse}
+🗺️ Google Maps : ${formData.maps || "—"}
+📞 Téléphone : ${formData.telephone}
+📧 Email : ${formData.email || "—"}
+🌍 Langue : ${formData.langue}
+🎨 Couleurs : ${formData.couleurs || "—"}
+➕ Options : ${[formData.options.rsvp && "RSVP (+20 DH)", formData.options.express && "Livraison Express (+20 DH)"].filter(Boolean).join(", ") || "Aucune"}
+📝 Commentaires : ${formData.commentaires || "—"}
+━━━━━━━━━━━━━━━━━━
+💰 Total : ${total} DH
+━━━━━━━━━━━━━━━━━━
+Merci.`;
+    window.open(`https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  return (
+    <div className="heka-root">
+      <GlobalStyle />
+      <Loader show={loading} />
+
+      <Navbar onNav={(id) => (id === "hero" ? goto(() => setView("home")) : scrollHome(id))} onStart={startOrder} />
+
+      {view === "order" && orderStep < 4 && orderStep >= 0 && <ProgressBar step={orderStep} onBack={backStep} />}
+      {view === "order" && orderStep === 4 && <ProgressBar step={orderStep} onBack={backStep} />}
+
+      {view === "home" && (
+        <>
+          <Hero onStart={startOrder} onSeeModels={() => scrollHome("categories")} />
+          <WhyChoose />
+          <HowItWorks />
+          <CategoriesPreview categories={CATEGORIES} onPick={(cat) => goto(() => { setCategory(cat); setView("order"); setOrderStep(1); })} />
+          <FAQ />
+          <Contact whatsapp={whatsapp} email={email} />
+          <Footer />
+          <div style={{ textAlign: "center", padding: "16px", background: C.black }}>
+            <button onClick={() => setView("admin")} style={{ background: "none", border: "none", color: "#7a776d", fontSize: 11, cursor: "pointer" }}>Administration</button>
+          </div>
+        </>
+      )}
+
+      {view === "order" && orderStep === 0 && <StepCategories categories={CATEGORIES} onPick={pickCategory} />}
+      {view === "order" && orderStep === 1 && <StepPacks packs={packs} selected={pack} onPick={pickPack} />}
+      {view === "order" && orderStep === 2 && category && pack && <StepModels models={models} category={category} pack={pack} onPick={pickModel} />}
+      {view === "order" && orderStep === 3 && <StepForm data={formData} setData={setFormData} onContinue={continueForm} />}
+      {view === "order" && orderStep === 4 && (
+        <StepRecap category={category} pack={pack} model={model} data={formData} total={total} onEdit={editOrder} onSubmit={submitOrder} />
+      )}
+
+      {view === "admin" && (
+        <>
+          <AdminPage
+            packs={packs} setPacks={setPacks}
+            whatsapp={whatsapp} setWhatsapp={setWhatsapp}
+            email={email} setEmail={setEmail}
+            delay={delay} setDelay={setDelay}
+            models={models} setModels={setModels}
+            categories={CATEGORIES}
+            lastUpdate={lastUpdate}
+          />
+          <div style={{ textAlign: "center", paddingBottom: 40 }}>
+            <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.petrol, fontSize: 13, cursor: "pointer" }}>← Retour au site</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
